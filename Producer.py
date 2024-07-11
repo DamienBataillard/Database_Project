@@ -2,6 +2,13 @@ import requests
 from kafka import KafkaProducer
 import json
 import time
+from pymongo import MongoClient
+from bson import ObjectId
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Function to retrieve data from the API
 def fetch_data(api_key):
@@ -24,7 +31,7 @@ def send_messages(producer, topic, data):
         if data['success'] == 1:
             for event in data['result']:
                 producer.send(topic, value=event)
-                print(f"Sent: {event}")
+                print(f"Sent to Kafka: {event}")
                 time.sleep(1)  # Sleep for 1 second between sends
         else:
             print("No successful data to send.")
@@ -32,17 +39,42 @@ def send_messages(producer, topic, data):
         print(f"An error occurred: {e}")
     finally:
         producer.flush()
-        producer.close()
+
+# Function to insert data into MongoDB
+def insert_to_mongo(db, data):
+    try:
+        if data['success'] == 1:
+            for event in data['result']:
+                event['_id'] = str(ObjectId())  # Convert ObjectId to string
+                db.insert_one(event)
+        else:
+            print("No successful data to insert.")
+    except Exception as e:
+        print(f"An error occurred while inserting to MongoDB: {e}")
 
 if __name__ == '__main__':
-    API_KEY = '7f2a4b0e9e8f0aaa556e50295f047d137f05982cf576327262b0c9efa7c4b1a2'
+    API_KEY = os.getenv('API_KEY')
     TOPIC = 'football_live'
-
-    # Fetch data from API
-    data = fetch_data(API_KEY)
 
     # Create Kafka producer
     producer = create_producer()
 
-    # Send messages to Kafka
-    send_messages(producer, TOPIC, data)
+    # MongoDB setup
+    client = MongoClient('localhost', 27017)
+    db = client['FootballDB']['RawData']
+
+    while True:
+        try:
+            # Fetch data from API
+            data = fetch_data(API_KEY)
+
+            # Insert data into MongoDB
+            insert_to_mongo(db, data)
+
+            # Send messages to Kafka
+            send_messages(producer, TOPIC, data)
+            
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        time.sleep(60)  # Wait for 60 seconds before fetching new data

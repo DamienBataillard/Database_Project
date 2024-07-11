@@ -58,26 +58,27 @@ consumer = KafkaConsumer(
 )
 producer = KafkaProducer(bootstrap_servers=['localhost:9092'])
 
-for msg in consumer:
-    if msg.value.decode("utf-8") != "Error in Connection":
-        data = structure_validate_data(msg)
-        
-        # Remplacer le document existant ou insérer s'il n'existe pas
-        result = collection.replace_one(
-            {'event_key': data['event_key']},
-            data,
-            upsert=True
-        )
-        
-        # Si un document a été mis à jour ou inséré, l'envoyer au topic 'football_live_clean'
-        if result.matched_count > 0 or result.upserted_id is not None:
-            # Ajouter l'ID du document MongoDB aux données avant de les envoyer
-            if result.upserted_id:
-                data["_id"] = str(result.upserted_id)
-            else:
-                existing_doc = collection.find_one({'event_key': data['event_key']})
-                data["_id"] = str(existing_doc['_id'])
+while True:
+    for msg in consumer:
+        if msg.value.decode("utf-8") != "Error in Connection":
+            data = structure_validate_data(msg)
+            
+            # Remplacer le document existant ou insérer s'il n'existe pas
+            result = collection.replace_one(
+                {'event_key': data['event_key']},
+                data,
+                upsert=True
+            )
+            
+            # Si un document a été mis à jour ou inséré, l'envoyer au topic 'football_live_clean'
+            if result.matched_count > 0 or result.upserted_id is not None:
+                # Ajouter l'ID du document MongoDB aux données avant de les envoyer
+                if result.upserted_id:
+                    data["_id"] = str(result.upserted_id)
+                else:
+                    existing_doc = collection.find_one({'event_key': data['event_key']})
+                    data["_id"] = str(existing_doc['_id'])
 
-            producer.send("football_live_clean", json.dumps(data).encode('utf-8'))
-        
-        print(data)
+                producer.send("football_live_clean", json.dumps(data).encode('utf-8'))
+            
+            print(data)

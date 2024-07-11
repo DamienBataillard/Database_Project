@@ -9,7 +9,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayMatches() {
         console.log('Displaying matches:', matches);
         scoresDiv.innerHTML = '';
-        matches.forEach(data => {
+
+        const filteredMatches = matches.filter(data => data.RawData.event_status !== 'Finished');
+
+        filteredMatches.sort((a, b) => new Date(`${b.event_date} ${b.event_time}`) - new Date(`${a.event_date} ${a.event_time}`));
+
+        filteredMatches.forEach(data => {
             const matchDiv = document.createElement('div');
             matchDiv.classList.add('match');
             const minutes = data.RawData.event_status; // Assuming event_status contains the match minute
@@ -18,7 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <p>Date: ${data.event_date}</p>
                 <p>Time: ${data.event_time}</p>
                 <p>Minutes: ${minutes}</p>
-                <p>Final Result: ${data.RawData.event_final_result}</p>
+                <p>Result: ${data.RawData.event_final_result}</p>
             `;
             matchDiv.onclick = function() {
                 showMatchDetails(data);
@@ -30,11 +35,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function showMatchDetails(data) {
         document.getElementById('modalTitle').innerText = `${data.event_home_team} vs ${data.event_away_team}`;
         document.getElementById('modalDate').innerText = `Date: ${data.event_date}`;
-        document.getElementById('modalTime').innerText = `Time: ${data.event_time}`;
+        document.getElementById('modalTime').innerText = `Time: ${data.event_time} | Minutes: ${data.RawData.event_status}`;
         document.getElementById('modalResult').innerText = `Final Result: ${data.RawData.event_final_result}`;
-
-        // Display match minutes
-        document.getElementById('modalTime').innerText += ` | Minutes: ${data.RawData.event_status}`;
 
         // Display goalscorers
         const goalscorersDiv = document.getElementById('modalGoalscorers');
@@ -125,13 +127,19 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             console.log('Initial data received:', data);
             matches = data;
-            matches.sort((a, b) => new Date(`${a.event_date} ${a.event_time}`) - new Date(`${b.event_date} ${b.event_time}`));
+            matches.sort((a, b) => new Date(`${b.event_date} ${b.event_time}`) - new Date(`${a.event_date} ${a.event_time}`));
             displayMatches();
         });
 
     socket.on('new_data', function(data) {
+        // Remove finished matches from the list
+        matches = matches.filter(match => match.RawData.event_status !== 'Finished');
+
+        // Add new data to the list
         matches.push(data);
-        matches.sort((a, b) => new Date(`${a.event_date} ${a.event_time}`) - new Date(`${b.event_date} ${b.event_time}`));
+
+        // Sort and display the matches
+        matches.sort((a, b) => new Date(`${b.event_date} ${b.event_time}`) - new Date(`${a.event_date} ${a.event_time}`));
         displayMatches();
     });
 });
