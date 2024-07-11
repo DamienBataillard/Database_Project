@@ -7,14 +7,17 @@ document.addEventListener('DOMContentLoaded', function() {
     var matches = [];
 
     function displayMatches() {
+        console.log('Displaying matches:', matches);
         scoresDiv.innerHTML = '';
         matches.forEach(data => {
             const matchDiv = document.createElement('div');
             matchDiv.classList.add('match');
+            const minutes = data.RawData.event_status; // Assuming event_status contains the match minute
             matchDiv.innerHTML = `
                 <h2>${data.event_home_team} vs ${data.event_away_team}</h2>
                 <p>Date: ${data.event_date}</p>
                 <p>Time: ${data.event_time}</p>
+                <p>Minutes: ${minutes}</p>
                 <p>Final Result: ${data.RawData.event_final_result}</p>
             `;
             matchDiv.onclick = function() {
@@ -29,6 +32,9 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('modalDate').innerText = `Date: ${data.event_date}`;
         document.getElementById('modalTime').innerText = `Time: ${data.event_time}`;
         document.getElementById('modalResult').innerText = `Final Result: ${data.RawData.event_final_result}`;
+
+        // Display match minutes
+        document.getElementById('modalTime').innerText += ` | Minutes: ${data.RawData.event_status}`;
 
         // Display goalscorers
         const goalscorersDiv = document.getElementById('modalGoalscorers');
@@ -117,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/initial_data')
         .then(response => response.json())
         .then(data => {
+            console.log('Initial data received:', data);
             matches = data;
             matches.sort((a, b) => new Date(`${a.event_date} ${a.event_time}`) - new Date(`${b.event_date} ${b.event_time}`));
             displayMatches();

@@ -1,26 +1,22 @@
 import json
-from dateutil import parser
 from pyspark import SparkContext
 from kafka import KafkaConsumer, KafkaProducer
 from pymongo import MongoClient
 
-# MongoDB setup
+# Configuration de MongoDB
 client = MongoClient('localhost', 27017)
 db = client['FootballDB']
 collection = db['LiveMatchData']
 
-def event_key_exist(event_key):
-    return collection.count_documents({'event_key': event_key}) > 0
-
 def structure_validate_data(msg):
     data_dict = {}
-    
-    # Parse message
+
+    # Parser le message
     event = json.loads(msg.value.decode("utf-8"))
-    
+
     data_dict["RawData"] = event
-    
-    # Validate and structure data
+
+    # Valider et structurer les données
     try:
         data_dict["event_key"] = event['event_key']
     except KeyError:
@@ -46,26 +42,42 @@ def structure_validate_data(msg):
     except KeyError:
         data_dict["event_away_team"] = "Error"
 
-    # Add more fields as needed...
+    # Ajouter d'autres champs si nécessaire...
 
     return data_dict
 
 sc = SparkContext.getOrCreate()
 sc.setLogLevel("WARN")
 
-# Kafka setup
-consumer = KafkaConsumer('football_live', auto_offset_reset='earliest', bootstrap_servers=['localhost:9092'], consumer_timeout_ms=1000)
+# Configuration de Kafka
+consumer = KafkaConsumer(
+    'football_live', 
+    auto_offset_reset='earliest', 
+    bootstrap_servers=['localhost:9092'], 
+    consumer_timeout_ms=1000
+)
 producer = KafkaProducer(bootstrap_servers=['localhost:9092'])
 
 for msg in consumer:
     if msg.value.decode("utf-8") != "Error in Connection":
         data = structure_validate_data(msg)
         
-        if not event_key_exist(data['event_key']):
-            # Push data to MongoDB
-            result = collection.insert_one(data)
-            # Convert ObjectId to string
-            data["_id"] = str(result.inserted_id)
+        # Remplacer le document existant ou insérer s'il n'existe pas
+        result = collection.replace_one(
+            {'event_key': data['event_key']},
+            data,
+            upsert=True
+        )
+        
+        # Si un document a été mis à jour ou inséré, l'envoyer au topic 'football_live_clean'
+        if result.matched_count > 0 or result.upserted_id is not None:
+            # Ajouter l'ID du document MongoDB aux données avant de les envoyer
+            if result.upserted_id:
+                data["_id"] = str(result.upserted_id)
+            else:
+                existing_doc = collection.find_one({'event_key': data['event_key']})
+                data["_id"] = str(existing_doc['_id'])
+
             producer.send("football_live_clean", json.dumps(data).encode('utf-8'))
         
         print(data)

@@ -8,8 +8,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app)
 
-# Temporary storage for consumed messages
-consumed_messages = []
+# Temporary storage for consumed messages, using a dictionary to avoid duplicates
+consumed_messages = {}
+emitted_event_keys = set()
 
 # Kafka setup
 consumer = KafkaConsumer(
@@ -24,9 +25,24 @@ def consume_kafka():
     global consumed_messages
     for message in consumer:
         data = message.value
-        consumed_messages.append(data)
-        socketio.emit('new_data', data)
-        print(f"Sent: {data}")
+        event_key = data.get('event_key')
+
+        if event_key:
+            if event_key in consumed_messages:
+                # If the message exists, check if it needs updating
+                if consumed_messages[event_key] != data:
+                    consumed_messages[event_key] = data
+                    if event_key not in emitted_event_keys:
+                        socketio.emit('new_data', data)
+                        emitted_event_keys.add(event_key)
+                    print(f"Updated and sent: {data}")
+            else:
+                # If the message does not exist, add it
+                consumed_messages[event_key] = data
+                if event_key not in emitted_event_keys:
+                    socketio.emit('new_data', data)
+                    emitted_event_keys.add(event_key)
+                print(f"Added and sent: {data}")
 
 @app.route('/')
 def index():
@@ -34,7 +50,8 @@ def index():
 
 @app.route('/initial_data')
 def initial_data():
-    return jsonify(consumed_messages)
+    # Return the list of unique messages
+    return jsonify(list(consumed_messages.values()))
 
 if __name__ == '__main__':
     kafka_thread = threading.Thread(target=consume_kafka)
